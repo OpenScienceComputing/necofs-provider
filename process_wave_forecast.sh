@@ -7,6 +7,8 @@ WAVE_OUT="/home/user/rsignell/NECOFS_WAVE_FORECAST_br.nc"
 S3_DEST="neracoos-necofs-forecast:neracoos-necofs-forecast/WAVE"
 NCKS="/data/rsignell/miniforge3/envs/CLI/bin/ncks"
 RCLONE="/usr/bin/rclone"
+ICECHUNK_PY="/data/rsignell/miniforge3/envs/icechunk/bin/python"
+ICECHUNK_SCRIPT="/home/user/rsignell/repos/necofs-provider/process_wave_icechunk.py"
 LOGFILE="/home/user/rsignell/bin/process_wave_forecast.log"
 
 DATE=$(date +%Y%m%d)
@@ -22,6 +24,7 @@ fi
 # Bitrounding + rechunking
 echo "$(date): Running ncks bitrounding/rechunking..." >> "$LOGFILE"
 "$NCKS" -O -4 -L 4 \
+  -x -v siglay,siglev \
   --cnk_dmn time,48 --cnk_dmn node,34514 --cnk_dmn nele,34514 \
   --qnt_alg btr --qnt hs=12 --qnt wdir=12 --qnt tpeak=12 --qnt wlen=12 \
   --qnt zeta=14 --qnt uwind_speed=12 --qnt vwind_speed=12 \
@@ -44,3 +47,14 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "$(date): Done. Uploaded NECOFS_WAVE_FORECAST_${DATE}_br.nc" >> "$LOGFILE"
+
+# Append virtual dataset to icechunk store
+echo "$(date): Appending virtual dataset to icechunk..." >> "$LOGFILE"
+"$ICECHUNK_PY" "$ICECHUNK_SCRIPT" "$DATE" >> "$LOGFILE" 2>&1
+
+if [ $? -ne 0 ]; then
+    echo "$(date): ERROR - icechunk append failed" >> "$LOGFILE"
+    exit 1
+fi
+
+echo "$(date): Icechunk append complete." >> "$LOGFILE"
