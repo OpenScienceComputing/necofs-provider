@@ -10,6 +10,7 @@ NCRENAME="/data/rsignell/miniforge3/envs/CLI/bin/ncrename"
 RCLONE="/usr/bin/rclone"
 ICECHUNK_PY="/data/rsignell/miniforge3/envs/icechunk/bin/python"
 ICECHUNK_SCRIPT="/home/user/rsignell/repos/necofs-provider/process_wave_icechunk.py"
+TIMESERIES_SCRIPT="/home/user/rsignell/repos/necofs-provider/process_wave_timeseries.py"
 LOGFILE="/home/user/rsignell/bin/process_wave_forecast.log"
 
 DATE=$(date +%Y%m%d)
@@ -67,4 +68,15 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo "$(date): Icechunk append complete." >> "$LOGFILE"
+echo "$(date): Icechunk FMRC append complete." >> "$LOGFILE"
+
+# Append to flat timeseries icechunk store
+echo "$(date): Appending to timeseries icechunk..." >> "$LOGFILE"
+"$ICECHUNK_PY" "$TIMESERIES_SCRIPT" "$DATE" >> "$LOGFILE" 2>&1
+
+if [ $? -ne 0 ]; then
+    echo "$(date): ERROR - timeseries icechunk append failed" >> "$LOGFILE"
+    exit 1
+fi
+
+echo "$(date): Timeseries icechunk append complete." >> "$LOGFILE"
