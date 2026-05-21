@@ -26,7 +26,7 @@ fi
 echo "$(date): Running ncks bitrounding/rechunking..." >> "$LOGFILE"
 "$NCKS" -O -4 -L 4 \
   -x -v Itime,Itime2,Times \
-  --cnk_dmn time,48 --cnk_dmn node,34514 --cnk_dmn nele,34514 \
+  --cnk_dmn time,24 --cnk_dmn node,34514 --cnk_dmn nele,34514 \
   --qnt_alg btr --qnt hs=12 --qnt wdir=12 --qnt tpeak=12 --qnt wlen=12 \
   --qnt zeta=14 --qnt uwind_speed=12 --qnt vwind_speed=12 \
   "$WAVE_SRC" "$WAVE_OUT" >> "$LOGFILE" 2>&1
