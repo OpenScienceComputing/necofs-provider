@@ -6,6 +6,7 @@ WAVE_SRC="/data/necofs/NECOFS_ARCHIVES/NECOFS_WAVE_FORECAST.nc"
 WAVE_OUT="/home/user/rsignell/NECOFS_WAVE_FORECAST_br.nc"
 S3_DEST="neracoos-necofs-forecast:neracoos-necofs-forecast/WAVE"
 NCKS="/data/rsignell/miniforge3/envs/CLI/bin/ncks"
+NCRENAME="/data/rsignell/miniforge3/envs/CLI/bin/ncrename"
 RCLONE="/usr/bin/rclone"
 ICECHUNK_PY="/data/rsignell/miniforge3/envs/icechunk/bin/python"
 ICECHUNK_SCRIPT="/home/user/rsignell/repos/necofs-provider/process_wave_icechunk.py"
@@ -24,7 +25,7 @@ fi
 # Bitrounding + rechunking
 echo "$(date): Running ncks bitrounding/rechunking..." >> "$LOGFILE"
 "$NCKS" -O -4 -L 4 \
-  -x -v siglay,siglev \
+  -x -v Itime,Itime2,Times \
   --cnk_dmn time,48 --cnk_dmn node,34514 --cnk_dmn nele,34514 \
   --qnt_alg btr --qnt hs=12 --qnt wdir=12 --qnt tpeak=12 --qnt wlen=12 \
   --qnt zeta=14 --qnt uwind_speed=12 --qnt vwind_speed=12 \
@@ -32,6 +33,15 @@ echo "$(date): Running ncks bitrounding/rechunking..." >> "$LOGFILE"
 
 if [ $? -ne 0 ]; then
     echo "$(date): ERROR - ncks failed" >> "$LOGFILE"
+    exit 1
+fi
+
+# Rename siglay/siglev to avoid VirtualiZarr parser confusion (same name as dimension)
+echo "$(date): Renaming siglay/siglev variables..." >> "$LOGFILE"
+"$NCRENAME" -v siglay,sigma_layer -v siglev,sigma_level "$WAVE_OUT" >> "$LOGFILE" 2>&1
+
+if [ $? -ne 0 ]; then
+    echo "$(date): ERROR - ncrename failed" >> "$LOGFILE"
     exit 1
 fi
 

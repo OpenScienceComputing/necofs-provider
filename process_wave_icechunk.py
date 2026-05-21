@@ -8,7 +8,7 @@ Usage: process_wave_icechunk.py YYYYMMDD
 import sys
 import os
 from dotenv import load_dotenv
-import pandas as pd
+import pandas as pd  # still used in fix_ds for date_range
 import xarray as xr
 import icechunk
 from obstore.store import from_url
@@ -48,20 +48,17 @@ def main(date):
 
     store = from_url(BUCKET_URL, region=REGION)
     registry = ObjectStoreRegistry({BUCKET_URL: store})
-    # Drop redundant FVCOM time variables (Itime2 has non-CF units that trip xarray)
+    # sigma_layer/sigma_level are siglay/siglev renamed in the file to avoid a
+    # VirtualiZarr parser bug (variables sharing a name with their first dimension)
     ds = open_virtual_dataset(
         url=url,
         parser=HDFParser(),
         registry=registry,
-        drop_variables=["Itime", "Itime2", "Times"],
         loadable_variables=["time"],
-        decode_times=False,
     )
-    # Manually decode MJD time (days since 1858-11-17)
-    mjd_origin = pd.Timestamp("1858-11-17")
-    time_values = mjd_origin + pd.to_timedelta(ds.time.values, unit="D")
-    ds = ds.assign_coords(time=time_values)
+    ds = ds.rename_vars({"sigma_layer": "siglay", "sigma_level": "siglev"})
     ds = fix_ds(ds)
+    ds = ds.expand_dims("time")  # promote scalar time coord to 1-element dimension
     print(f"Virtual dataset ready: time={ds.time.values}, steps={len(ds.step)}")
 
     storage = icechunk.s3_storage(
@@ -86,7 +83,7 @@ def main(date):
         session = repo.writable_session("main")
         ds.virtualize.to_icechunk(session.store, append_dim="time")
         print("Appended to existing icechunk store")
-    except Exception:
+    except icechunk.IcechunkError:
         repo = icechunk.Repository.create(storage, config, authorize_virtual_chunk_access=credentials)
         session = repo.writable_session("main")
         ds.virtualize.to_icechunk(session.store)
