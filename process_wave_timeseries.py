@@ -92,9 +92,8 @@ def write_mesh_topology(session):
     arr.attrs.update(MESH_TOPOLOGY_ATTRS)
 
 
-TIME_CHUNK = 24                                        # time chunk size in _br.nc files
 HISTORY_STEPS = 24                                     # steps kept per completed forecast day
-TAIL_STEPS = (145 // TIME_CHUNK) * TIME_CHUNK          # = 144, largest aligned tail for latest file
+TAIL_STEPS = 145                                       # actual steps in each _br.nc file
 
 
 def fix_time(ds):
@@ -112,10 +111,10 @@ def fix_time(ds):
 
 
 def to_timeseries(ds):
-    """Convert step dim to flat valid-time dimension using TAIL_STEPS steps."""
-    ds = ds.isel(step=slice(0, TAIL_STEPS))
+    """Convert step dim to flat valid-time dimension using all available steps."""
     t0 = pd.Timestamp(ds.time.values)
-    valid_times = pd.date_range(t0, periods=len(ds.step), freq="1h")
+    n_steps = ds.sizes['step']
+    valid_times = pd.date_range(t0, periods=n_steps, freq="1h")
     ds = ds.drop_vars("time")
     ds = ds.rename_dims({"step": "time"})
     ds = ds.drop_vars("step")
@@ -177,12 +176,20 @@ def main(date):
         {f"{BUCKET_URL}/": icechunk.s3_credentials(anonymous=False)}
     )
 
+    new_last_time = ds.time.values[-1]
+
     try:
         repo = icechunk.Repository.open(storage, config, authorize_virtual_chunk_access=credentials)
         session = repo.writable_session("main")
-        trim_tail(session)
-        ds.virtualize.to_icechunk(session.store, append_dim="time")
-        print("Trimmed tail and appended new forecast")
+        ds_store = xr.open_zarr(session.store, consolidated=False, chunks={})
+        store_last_time = ds_store.time.values[-1]
+        if new_last_time > store_last_time:
+            trim_tail(session)
+            ds.virtualize.to_icechunk(session.store, append_dim="time")
+            print("Trimmed tail and appended new forecast")
+        else:
+            print(f"Re-run detected (store ends {store_last_time}, file ends {new_last_time}) — overwriting")
+            ds.virtualize.to_icechunk(session.store)
     except icechunk.IcechunkError:
         repo = icechunk.Repository.create(storage, config, authorize_virtual_chunk_access=credentials)
         session = repo.writable_session("main")
@@ -190,7 +197,7 @@ def main(date):
         print("Created new timeseries store")
 
     write_mesh_topology(session)
-    session.commit(f"appended timeseries {date}")
+    session.commit(f"timeseries {date}")
     print("Done.")
 
 
