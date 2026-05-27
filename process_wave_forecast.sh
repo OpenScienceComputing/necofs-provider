@@ -12,16 +12,31 @@ ICECHUNK_PY="/data/rsignell/miniforge3/envs/icechunk/bin/python"
 ICECHUNK_SCRIPT="/home/user/rsignell/repos/necofs-provider/process_wave_icechunk.py"
 TIMESERIES_SCRIPT="/home/user/rsignell/repos/necofs-provider/process_wave_timeseries.py"
 LOGFILE="/home/user/rsignell/bin/process_wave_forecast.log"
+LAST_TIME_FILE="${HOME}/.necofs_last_wave_forecast_time"
 
 DATE=$(date +%Y%m%d)
-echo "$(date): Starting wave forecast processing for $DATE" >> "$LOGFILE"
 
 # Check if file was updated today
 FILE_DATE=$(date -r "$WAVE_SRC" +%Y%m%d 2>/dev/null)
 if [ "$FILE_DATE" != "$DATE" ]; then
-    echo "$(date): Wave file not updated today (last: $FILE_DATE), skipping." >> "$LOGFILE"
     exit 0
 fi
+
+# Check if this forecast has already been uploaded (time[0] unchanged)
+FORECAST_TIME=$("$ICECHUNK_PY" -c "
+import netCDF4
+ds = netCDF4.Dataset('$WAVE_SRC')
+print(ds.variables['time'][0])
+ds.close()
+" 2>/dev/null)
+
+if [ -z "$FORECAST_TIME" ]; then
+    echo "$(date): WARNING - could not read time[0] from source file, proceeding anyway." >> "$LOGFILE"
+elif [ -f "$LAST_TIME_FILE" ] && [ "$(cat "$LAST_TIME_FILE")" = "$FORECAST_TIME" ]; then
+    exit 0
+fi
+
+echo "$(date): Starting wave forecast processing for $DATE" >> "$LOGFILE"
 
 # Bitrounding + rechunking
 echo "$(date): Running ncks bitrounding/rechunking..." >> "$LOGFILE"
@@ -58,6 +73,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "$(date): Done. Uploaded NECOFS_WAVE_FORECAST_${DATE}_br.nc" >> "$LOGFILE"
+[ -n "$FORECAST_TIME" ] && echo "$FORECAST_TIME" > "$LAST_TIME_FILE"
 
 # Append virtual dataset to icechunk store
 echo "$(date): Appending virtual dataset to icechunk..." >> "$LOGFILE"
