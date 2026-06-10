@@ -58,7 +58,7 @@ fi
 echo "$(date): Pushing to S3 as NECOFS_WAVE_FORECAST_${DATE}_br.nc..." >> "$LOGFILE"
 "$RCLONE" copyto "$WAVE_OUT" \
   "$S3_DEST/NECOFS_WAVE_FORECAST_${DATE}_br.nc" \
-  --s3-no-check-bucket >> "$LOGFILE" 2>&1
+  --s3-no-check-bucket --ignore-existing >> "$LOGFILE" 2>&1
 
 if [ $? -ne 0 ]; then
     echo "$(date): ERROR - rclone failed" >> "$LOGFILE"
