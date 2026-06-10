@@ -122,14 +122,15 @@ def to_timeseries(ds):
     return ds
 
 
-def trim_tail(session):
+def trim_tail(session, steps_to_remove=TAIL_STEPS - HISTORY_STEPS):
     """
-    Trim the previous day's extended tail to HISTORY_STEPS.
-    Resizes all time-indexed arrays from current length to (current - TAIL_STEPS + HISTORY_STEPS).
+    Remove `steps_to_remove` time steps from the end of all time-indexed arrays.
+    Default trims the previous day's extended tail from TAIL_STEPS down to HISTORY_STEPS.
+    Pass steps_to_remove=TAIL_STEPS to fully undo the last append on a re-run.
     """
     z = zarr.open_group(session.store, mode="r+")
     time_len = z["time"].shape[0]
-    trim_to = time_len - (TAIL_STEPS - HISTORY_STEPS)
+    trim_to = time_len - steps_to_remove
     if trim_to >= time_len:
         return
     for name in z.array_keys():
@@ -188,8 +189,9 @@ def main(date):
             ds.virtualize.to_icechunk(session.store, append_dim="time")
             print("Trimmed tail and appended new forecast")
         else:
-            print(f"Re-run detected (store ends {store_last_time}, file ends {new_last_time}) — overwriting")
-            ds.virtualize.to_icechunk(session.store)
+            print(f"Re-run detected (store ends {store_last_time}, file ends {new_last_time}) — overwriting last {TAIL_STEPS} steps")
+            trim_tail(session, steps_to_remove=TAIL_STEPS)
+            ds.virtualize.to_icechunk(session.store, append_dim="time")
     except icechunk.IcechunkError:
         repo = icechunk.Repository.create(storage, config, authorize_virtual_chunk_access=credentials)
         session = repo.writable_session("main")

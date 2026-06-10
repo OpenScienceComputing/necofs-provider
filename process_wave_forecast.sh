@@ -6,6 +6,7 @@ WAVE_SRC="/data/necofs/NECOFS_ARCHIVES/NECOFS_WAVE_FORECAST.nc"
 WAVE_OUT="/home/user/rsignell/NECOFS_WAVE_FORECAST_br.nc"
 S3_DEST="neracoos-necofs-forecast:neracoos-necofs-forecast/WAVE"
 NCKS="/data/rsignell/miniforge3/envs/CLI/bin/ncks"
+NCDUMP="/data/rsignell/miniforge3/envs/CLI/bin/ncdump"
 NCRENAME="/data/rsignell/miniforge3/envs/CLI/bin/ncrename"
 RCLONE="/usr/bin/rclone"
 ICECHUNK_PY="/data/rsignell/miniforge3/envs/icechunk/bin/python"
@@ -14,25 +15,17 @@ TIMESERIES_SCRIPT="/home/user/rsignell/repos/necofs-provider/process_wave_timese
 LOGFILE="/home/user/rsignell/bin/process_wave_forecast.log"
 LAST_TIME_FILE="${HOME}/.necofs_last_wave_forecast_time"
 
-DATE=$(date +%Y%m%d)
+# Derive date and duplicate-check value from the forecast data itself
+FORECAST_TIME=$("$NCKS" -H -s '%g\n' -v time -d time,0 "$WAVE_SRC" 2>/dev/null)
+DATE=$("$NCDUMP" -t -v time "$WAVE_SRC" 2>/dev/null | grep -oP '"\K[0-9]{4}-[0-9]{2}-[0-9]{2}(?=")' | head -1 | tr -d '-')
 
-# Check if file was updated today
-FILE_DATE=$(date -r "$WAVE_SRC" +%Y%m%d 2>/dev/null)
-if [ "$FILE_DATE" != "$DATE" ]; then
+if [ -z "$FORECAST_TIME" ] || [ -z "$DATE" ]; then
+    echo "$(date): WARNING - could not read time[0] from source file, skipping." >> "$LOGFILE"
     exit 0
 fi
 
-# Check if this forecast has already been uploaded (time[0] unchanged)
-FORECAST_TIME=$("$ICECHUNK_PY" -c "
-import netCDF4
-ds = netCDF4.Dataset('$WAVE_SRC')
-print(ds.variables['time'][0])
-ds.close()
-" 2>/dev/null)
-
-if [ -z "$FORECAST_TIME" ]; then
-    echo "$(date): WARNING - could not read time[0] from source file, proceeding anyway." >> "$LOGFILE"
-elif [ -f "$LAST_TIME_FILE" ] && [ "$(cat "$LAST_TIME_FILE")" = "$FORECAST_TIME" ]; then
+# Skip if this forecast has already been processed
+if [ -f "$LAST_TIME_FILE" ] && [ "$(cat "$LAST_TIME_FILE")" = "$FORECAST_TIME" ]; then
     exit 0
 fi
 
