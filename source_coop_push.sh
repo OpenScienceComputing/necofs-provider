@@ -13,8 +13,9 @@ AWS="/home/user/rsignell/bin/aws"
 export AWS_REGION="us-west-2"
 export AWS_ENDPOINT_URL_S3="https://data.source.coop"
 export AWS_ENDPOINT_URL_STS="https://data.source.coop/.sts"
-export AWS_ROLE_ARN="arn:aws:iam::ocean-icechunks--necofs-pipeline:role/FullAccess"
-export AWS_WEB_IDENTITY_TOKEN_FILE="/home/user/rsignell/.source-coop/necofs.key"
+# Override SC_ROLE_ARN / SC_KEY_FILE to publish under a different service account.
+export AWS_ROLE_ARN="${SC_ROLE_ARN:-arn:aws:iam::ocean-icechunks--necofs-pipeline:role/FullAccess}"
+export AWS_WEB_IDENTITY_TOKEN_FILE="${SC_KEY_FILE:-/home/user/rsignell/.source-coop/necofs.key}"
 
 if [ $# -ne 2 ]; then
     echo "Usage: $0 LOCAL_FILE s3://account/product/path" >&2
