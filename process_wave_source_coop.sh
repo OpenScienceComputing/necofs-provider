@@ -26,6 +26,18 @@ export SC_ROLE_ARN="arn:aws:iam::ocean-icechunks--necofs-wave-updates:role/FullA
 
 log() { echo "$(date): $*" >> "$LOGFILE"; }
 
+# Warn if the provider's forecast is older than this many days.
+MAX_AGE_DAYS=4
+WARN_FILE="/home/user/rsignell/.necofs_wave_sc_warned"
+
+# Log a warning at most once per day per condition (the job polls hourly).
+warn_once() {
+    local key="$1:$(date +%Y%m%d)"
+    grep -qxF "$key" "$WARN_FILE" 2>/dev/null && return 0
+    echo "$key" >> "$WARN_FILE"
+    log "WARNING - $2"
+}
+
 exec 9>"$LOCKFILE"
 flock -n 9 || exit 0
 
@@ -35,6 +47,16 @@ DATE=$("$NCDUMP" -t -v time "$WAVE_SRC" 2>/dev/null | grep -oP '"\K[0-9]{4}-[0-9
 if [ -z "$FORECAST_TIME" ] || [ -z "$DATE" ]; then
     log "WARNING - could not read time[0] from source file, skipping."
     exit 0
+fi
+
+# Staleness / sanity checks on the provider's file (run on every poll).
+AGE_DAYS=$(( ($(date +%s) - $(date -d "$DATE" +%s)) / 86400 ))
+if [ "$AGE_DAYS" -gt "$MAX_AGE_DAYS" ]; then
+    warn_once "stale" "provider forecast $DATE is $AGE_DAYS days old (> $MAX_AGE_DAYS); source file mtime $(date -r "$WAVE_SRC" '+%Y-%m-%d %H:%M')"
+fi
+if [ -f "$LAST_TIME_FILE" ] && \
+   awk -v a="$FORECAST_TIME" -v b="$(cat "$LAST_TIME_FILE")" 'BEGIN{exit !(b - a > 0.5)}'; then
+    warn_once "backwards" "forecast time[0] went backwards: source is $DATE but last published time was MJD $(cat "$LAST_TIME_FILE") (source file replaced by an older run?)"
 fi
 
 if [ -f "$LAST_TIME_FILE" ] && [ "$(cat "$LAST_TIME_FILE")" = "$FORECAST_TIME" ]; then
